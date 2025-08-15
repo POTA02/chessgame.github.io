@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Interactive Chess Game</title>
+  <style>
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      background: linear-gradient(135deg, #232526 0%, #414345 100%);
+      background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.015) 0 1px, transparent 2px 20px);
+    }
+    h2 {
+      color: #fff;
+      margin-top: 32px;
+      letter-spacing: 2px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    }
+    #info, #points {
+      margin: 10px;
+      color: #eee;
+      font-weight: 500;
+    }
+    #chessboard {
+      border: 4px solid #222;
+      border-radius: 18px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.3);
+      display: grid;
+      grid-template: repeat(8, 70px) / repeat(8, 70px);
+      background: #222;
+      margin-bottom: 16px;
+    }
+    .square {
+      width: 70px; height: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 46px;
+      cursor: pointer;
+      transition: background 0.18s;
+      position: relative;
+      user-select: none;
+    }
+    .light { background: #f5f6fa; }
+    .dark { background: #3a4052; }
+    .selected { outline: 3px solid #1abc9c; z-index: 2; }
+    .movable { background: #b3e6d1 !important; }
+    button {
+      margin: 5px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      background: #1abc9c;
+      color: #fff;
+      border: none;
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 1px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    button:hover {
+      background: #159a80;
+    }
+    .piece-svg {
+      width: 46px;
+      height: 46px;
+      display: block;
+      pointer-events: none;
+      margin-top: 5px;
+      /* By default, pieces use their SVG color */
+    }
+    .king-attacked .piece-svg {
+      /* Highlight king in check */
+      filter: drop-shadow(0 0 8px #ff1a1a);
+    }
+    .king-attacked {
+      background: #ffdddd !important;
+      border-radius: 12px;
+      box-shadow: 0 0 16px 2px #ff1a1a88;
+    }
+  </style>
+</head>
+<body>
+  <h2>Interactive Chess Game</h2>
+  <div id="info">White's turn</div>
+  <div id="points">White: 0 | Black: 0</div>
+  <div id="chessboard"></div>
+  <button onclick="resetBoard()">Reset</button>
+  <script>
+    // SVG chess pieces, modern look
+    const PIECE_SVGS = {
+      'K': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <path d="M22.5 11.63V6" stroke="#222" stroke-width="2"/>
+          <path d="M20 8h5" stroke="#222" stroke-width="2"/>
+          <path d="M22.5 13c-3.5 0-6.5 2.5-6.5 6 0 2.5 1.5 5 3.5 6.5h6c2-1.5 3.5-4 3.5-6.5 0-3.5-3-6-6.5-6z"
+            fill="#fff" stroke="#222" stroke-width="2"/>
+          <circle cx="22.5" cy="26.5" r="2.5" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="17.5" y="30" width="10" height="5" rx="2" fill="#fff" stroke="#222" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'Q': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <circle cx="11.5" cy="17.5" r="2.5" fill="#fff" stroke="#222" stroke-width="1.5"/>
+          <circle cx="22.5" cy="8.5" r="2.5" fill="#fff" stroke="#222" stroke-width="1.5"/>
+          <circle cx="33.5" cy="17.5" r="2.5" fill="#fff" stroke="#222" stroke-width="1.5"/>
+          <path d="M11.5 18l4.5 14h13l4.5-14" fill="#fff" stroke="#222" stroke-width="2"/>
+          <ellipse cx="22.5" cy="31.5" rx="8.5" ry="2.5" fill="#fff" stroke="#222" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'R': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <rect x="14" y="10" width="17" height="20" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="12" y="30" width="21" height="4" rx="2" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="14" y="6" width="3" height="4" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="21" y="6" width="3" height="4" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="28" y="6" width="3" height="4" fill="#fff" stroke="#222" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'B': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <ellipse cx="22.5" cy="16" rx="7" ry="9" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="17.5" y="30" width="10" height="5" rx="2" fill="#fff" stroke="#222" stroke-width="2"/>
+          <circle cx="22.5" cy="10" r="2.2" fill="#fff" stroke="#222" stroke-width="1.5"/>
+        </g>
+      </svg>`,
+      'N': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <path d="M13 33l13-22 8 22" fill="#fff" stroke="#222" stroke-width="2"/>
+          <ellipse cx="22.5" cy="29" rx="6" ry="2.5" fill="#fff" stroke="#222" stroke-width="2"/>
+          <circle cx="28.5" cy="15" r="2" fill="#fff" stroke="#222" stroke-width="1.5"/>
+        </g>
+      </svg>`,
+      'P': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <circle cx="22.5" cy="15" r="6" fill="#fff" stroke="#222" stroke-width="2"/>
+          <rect x="16.5" y="21" width="12" height="12" rx="6" fill="#fff" stroke="#222" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'k': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <path d="M22.5 11.63V6" stroke="#111" stroke-width="2"/>
+          <path d="M20 8h5" stroke="#111" stroke-width="2"/>
+          <path d="M22.5 13c-3.5 0-6.5 2.5-6.5 6 0 2.5 1.5 5 3.5 6.5h6c2-1.5 3.5-4 3.5-6.5 0-3.5-3-6-6.5-6z"
+            fill="#222" stroke="#111" stroke-width="2"/>
+          <circle cx="22.5" cy="26.5" r="2.5" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="17.5" y="30" width="10" height="5" rx="2" fill="#222" stroke="#111" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'q': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <circle cx="11.5" cy="17.5" r="2.5" fill="#222" stroke="#111" stroke-width="1.5"/>
+          <circle cx="22.5" cy="8.5" r="2.5" fill="#222" stroke="#111" stroke-width="1.5"/>
+          <circle cx="33.5" cy="17.5" r="2.5" fill="#222" stroke="#111" stroke-width="1.5"/>
+          <path d="M11.5 18l4.5 14h13l4.5-14" fill="#222" stroke="#111" stroke-width="2"/>
+          <ellipse cx="22.5" cy="31.5" rx="8.5" ry="2.5" fill="#222" stroke="#111" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'r': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <rect x="14" y="10" width="17" height="20" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="12" y="30" width="21" height="4" rx="2" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="14" y="6" width="3" height="4" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="21" y="6" width="3" height="4" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="28" y="6" width="3" height="4" fill="#222" stroke="#111" stroke-width="2"/>
+        </g>
+      </svg>`,
+      'b': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <ellipse cx="22.5" cy="16" rx="7" ry="9" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="17.5" y="30" width="10" height="5" rx="2" fill="#222" stroke="#111" stroke-width="2"/>
+          <circle cx="22.5" cy="10" r="2.2" fill="#222" stroke="#111" stroke-width="1.5"/>
+        </g>
+      </svg>`,
+      'n': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <path d="M13 33l13-22 8 22" fill="#222" stroke="#111" stroke-width="2"/>
+          <ellipse cx="22.5" cy="29" rx="6" ry="2.5" fill="#222" stroke="#111" stroke-width="2"/>
+          <circle cx="28.5" cy="15" r="2" fill="#222" stroke="#111" stroke-width="1.5"/>
+        </g>
+      </svg>`,
+      'p': `<svg class="piece-svg" viewBox="0 0 45 45">
+        <g>
+          <circle cx="22.5" cy="15" r="6" fill="#222" stroke="#111" stroke-width="2"/>
+          <rect x="16.5" y="21" width="12" height="12" rx="6" fill="#222" stroke="#111" stroke-width="2"/>
+        </g>
+      </svg>`
+    };
+
+    const PIECE_STATS = {
+      'P': {points: 1},  'N': {points: 3},  'B': {points: 3},
+      'R': {points: 5},  'Q': {points: 9},  'K': {points: 0},
+      'p': {points: 1},  'n': {points: 3},  'b': {points: 3},
+      'r': {points: 5},  'q': {points: 9},  'k': {points: 0}
+    };
+
+    let boardFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+    let board = [];
+    let turn = 'w';
+    let selected = null;
+    let movableSquares = [];
+    let points = {w: 0, b: 0};
+
+    // King check state: { color: 'w' or 'b', pos: [r, c] } or null
+    let kingInCheck = null;
+
+    function parseFEN(fen) {
+      const rows = fen.split('/');
+      board = [];
+      for (let r = 0; r < 8; r++) {
+        let row = [];
+        for (let c = 0, i = 0; c < rows[r].length; c++) {
+          const ch = rows[r][c];
+          if (isNaN(ch)) {
+            row.push(ch);
+            i++;
+          } else {
+            for (let j = 0; j < +ch; j++) {
+              row.push('');
+              i++;
+            }
+          }
+        }
+        board.push(row);
+      }
+    }
+
+    function renderBoard() {
+      const cb = document.getElementById('chessboard');
+      cb.innerHTML = '';
+      const kingW = findKing('K');
+      const kingB = findKing('k');
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const sq = document.createElement('div');
+          sq.classList.add('square');
+          sq.classList.add((r + c) % 2 ? 'dark' : 'light');
+          if (selected && selected[0] === r && selected[1] === c) sq.classList.add('selected');
+          if (movableSquares.some(([mr, mc]) => mr === r && mc === c)) sq.classList.add('movable');
+          // Highlight king if in check
+          if (kingInCheck && kingInCheck.pos[0] === r && kingInCheck.pos[1] === c)
+            sq.classList.add('king-attacked');
+          sq.dataset.row = r; sq.dataset.col = c;
+          if (board[r][c]) {
+            sq.innerHTML = PIECE_SVGS[board[r][c]];
+          } else {
+            sq.innerHTML = '';
+          }
+          sq.onclick = () => squareClicked(r, c);
+          cb.appendChild(sq);
+        }
+      }
+      document.getElementById('points').textContent = `White: ${points.w} | Black: ${points.b}`;
+    }
+
+    function squareClicked(r, c) {
+      if (selected) {
+        if (movableSquares.some(([mr, mc]) => mr === r && mc === c)) {
+          attemptMoveOrAttack(selected[0], selected[1], r, c);
+          selected = null;
+          movableSquares = [];
+        } else {
+          selected = null;
+          movableSquares = [];
+        }
+      } else if (board[r][c] && ((turn === 'w' && board[r][c] === board[r][c].toUpperCase()) || (turn === 'b' && board[r][c] === board[r][c].toLowerCase()))) {
+        selected = [r, c];
+        movableSquares = getLegalMoves(r, c);
+      }
+      renderBoard();
+    }
+
+    function getLegalMoves(r, c) {
+      const moves = [];
+      const piece = board[r][c];
+      const directions = {
+        'P': [[-1, 0]], 'p': [[1, 0]],
+        'N': [[-2, -1],[ -2, 1], [2, -1],[2,1],[ -1, -2],[ -1, 2],[1, -2],[1,2]],
+        'n': [[-2, -1],[ -2, 1], [2, -1],[2,1],[ -1, -2],[ -1, 2],[1, -2],[1,2]],
+        'B': [[-1,-1],[1,1],[1,-1],[-1,1]], 'b': [[-1,-1],[1,1],[1,-1],[-1,1]],
+        'R': [[-1,0],[1,0],[0,-1],[0,1]], 'r': [[-1,0],[1,0],[0,-1],[0,1]],
+        'Q': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]], 'q': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]],
+        'K': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]], 'k': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]]
+      };
+
+      function addMove(dr, dc, repeat=false) {
+        let nr = r + dr, nc = c + dc;
+        while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+          if (!board[nr][nc]) {
+            moves.push([nr, nc]);
+          } else {
+            if ((turn === 'w' && board[nr][nc] === board[nr][nc].toLowerCase()) ||
+                (turn === 'b' && board[nr][nc] === board[nr][nc].toUpperCase()))
+              moves.push([nr, nc]);
+            break;
+          }
+          if (!repeat) break;
+          nr += dr; nc += dc;
+        }
+      }
+
+      if (piece === 'P') {
+        if (r > 0 && !board[r - 1][c]) moves.push([r - 1, c]);
+        if (r === 6 && !board[5][c] && !board[4][c]) moves.push([4, c]);
+        if (r > 0 && c > 0 && board[r - 1][c - 1] && board[r - 1][c - 1] === board[r - 1][c - 1].toLowerCase()) moves.push([r - 1, c - 1]);
+        if (r > 0 && c < 7 && board[r - 1][c + 1] && board[r - 1][c + 1] === board[r - 1][c + 1].toLowerCase()) moves.push([r - 1, c + 1]);
+      } else if (piece === 'p') {
+        if (r < 7 && !board[r + 1][c]) moves.push([r + 1, c]);
+        if (r === 1 && !board[2][c] && !board[3][c]) moves.push([3, c]);
+        if (r < 7 && c > 0 && board[r + 1][c - 1] && board[r + 1][c - 1] === board[r + 1][c - 1].toUpperCase()) moves.push([r + 1, c - 1]);
+        if (r < 7 && c < 7 && board[r + 1][c + 1] && board[r + 1][c + 1] === board[r + 1][c + 1].toUpperCase()) moves.push([r + 1, c + 1]);
+      } else if (piece.toLowerCase() === 'n') {
+        for (const [dr, dc] of directions[piece]) {
+          const nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            if (!board[nr][nc] || ((turn === 'w' && board[nr][nc] === board[nr][nc].toLowerCase()) || (turn === 'b' && board[nr][nc] === board[nr][nc].toUpperCase())))
+              moves.push([nr, nc]);
+          }
+        }
+      } else if ('bB'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, true);
+      } else if ('rR'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, true);
+      } else if ('qQ'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, true);
+      } else if ('kK'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, false);
+      }
+      return moves;
+    }
+
+    function attemptMoveOrAttack(fr, fc, tr, tc) {
+      // Point system on capture
+      if (board[tr][tc]) {
+        const captured = board[tr][tc];
+        let scorer = (turn === 'w') ? 'w' : 'b';
+        points[scorer] += PIECE_STATS[captured].points;
+        board[tr][tc] = board[fr][fc];
+      } else {
+        board[tr][tc] = board[fr][fc];
+      }
+      board[fr][fc] = '';
+
+      // Handle pawn promotion
+      if (board[tr][tc] === 'P' && tr === 0) {
+        board[tr][tc] = 'Q';
+      }
+      if (board[tr][tc] === 'p' && tr === 7) {
+        board[tr][tc] = 'q';
+      }
+
+      turn = (turn === 'w') ? 'b' : 'w';
+      document.getElementById('info').textContent = (turn === 'w' ? "White's" : "Black's") + " turn";
+
+      // After move, update king check system
+      updateKingInCheck();
+      renderBoard();
+    }
+
+    function findKing(kind) {
+      for (let r = 0; r < 8; r++)
+        for (let c = 0; c < 8; c++)
+          if (board[r][c] === kind) return [r, c];
+      return null;
+    }
+
+    // Returns true if the king of the given color is attacked
+    function isKingAttacked(color) {
+      const kingPos = findKing(color === 'w' ? 'K' : 'k');
+      if (!kingPos) return false;
+      const [kr, kc] = kingPos;
+      // Scan enemy pieces and see if any can move to king's square
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const pc = board[r][c];
+          if (!pc) continue;
+          if ((color === 'w' && pc === pc.toLowerCase()) || (color === 'b' && pc === pc.toUpperCase())) {
+            // For enemy piece, check if king is in its legal moves
+            const moves = getLegalMovesForColor(r, c, color === 'w' ? 'b' : 'w');
+            if (moves.some(([mr, mc]) => mr === kr && mc === kc)) {
+              return kingPos;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    // Like getLegalMoves, but use a given color as turn (for enemy move simulation)
+    function getLegalMovesForColor(r, c, moveColor) {
+      const moves = [];
+      const piece = board[r][c];
+      const directions = {
+        'P': [[-1, 0]], 'p': [[1, 0]],
+        'N': [[-2, -1],[ -2, 1], [2, -1],[2,1],[ -1, -2],[ -1, 2],[1, -2],[1,2]],
+        'n': [[-2, -1],[ -2, 1], [2, -1],[2,1],[ -1, -2],[ -1, 2],[1, -2],[1,2]],
+        'B': [[-1,-1],[1,1],[1,-1],[-1,1]], 'b': [[-1,-1],[1,1],[1,-1],[-1,1]],
+        'R': [[-1,0],[1,0],[0,-1],[0,1]], 'r': [[-1,0],[1,0],[0,-1],[0,1]],
+        'Q': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]], 'q': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]],
+        'K': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]], 'k': [[-1,-1],[1,1],[1,-1],[-1,1],[-1,0],[1,0],[0,-1],[0,1]]
+      };
+
+      function addMove(dr, dc, repeat=false) {
+        let nr = r + dr, nc = c + dc;
+        while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+          if (!board[nr][nc]) {
+            moves.push([nr, nc]);
+          } else {
+            if ((moveColor === 'w' && board[nr][nc] === board[nr][nc].toLowerCase()) ||
+                (moveColor === 'b' && board[nr][nc] === board[nr][nc].toUpperCase()))
+              moves.push([nr, nc]);
+            break;
+          }
+          if (!repeat) break;
+          nr += dr; nc += dc;
+        }
+      }
+
+      if (piece === 'P') {
+        if (r > 0 && !board[r - 1][c]) moves.push([r - 1, c]);
+        if (r === 6 && !board[5][c] && !board[4][c]) moves.push([4, c]);
+        if (r > 0 && c > 0 && board[r - 1][c - 1] && board[r - 1][c - 1] === board[r - 1][c - 1].toLowerCase()) moves.push([r - 1, c - 1]);
+        if (r > 0 && c < 7 && board[r - 1][c + 1] && board[r - 1][c + 1] === board[r - 1][c + 1].toLowerCase()) moves.push([r - 1, c + 1]);
+      } else if (piece === 'p') {
+        if (r < 7 && !board[r + 1][c]) moves.push([r + 1, c]);
+        if (r === 1 && !board[2][c] && !board[3][c]) moves.push([3, c]);
+        if (r < 7 && c > 0 && board[r + 1][c - 1] && board[r + 1][c - 1] === board[r + 1][c - 1].toUpperCase()) moves.push([r + 1, c - 1]);
+        if (r < 7 && c < 7 && board[r + 1][c + 1] && board[r + 1][c + 1] === board[r + 1][c + 1].toUpperCase()) moves.push([r + 1, c + 1]);
+      } else if (piece.toLowerCase() === 'n') {
+        for (const [dr, dc] of directions[piece]) {
+          const nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            if (!board[nr][nc] || ((moveColor === 'w' && board[nr][nc] === board[nr][nc].toLowerCase()) || (moveColor === 'b' && board[nr][nc] === board[nr][nc].toUpperCase())))
+              moves.push([nr, nc]);
+          }
+        }
+      } else if ('bB'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, true);
+      } else if ('rR'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, true);
+      } else if ('qQ'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, true);
+      } else if ('kK'.includes(piece)) {
+        for (const [dr, dc] of directions[piece]) addMove(dr, dc, false);
+      }
+      return moves;
+    }
+
+    function updateKingInCheck() {
+      // Only one king can be in check at a time.
+      let wCheck = isKingAttacked('w');
+      let bCheck = isKingAttacked('b');
+      if (wCheck) kingInCheck = { color: 'w', pos: wCheck };
+      else if (bCheck) kingInCheck = { color: 'b', pos: bCheck };
+      else kingInCheck = null;
+    }
+
+    function resetBoard() {
+      boardFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+      parseFEN(boardFEN);
+      turn = 'w';
+      selected = null;
+      movableSquares = [];
+      points = {w: 0, b: 0};
+      kingInCheck = null;
+      document.getElementById('info').textContent = "White's turn";
+      updateKingInCheck();
+      renderBoard();
+    }
+
+    // Initial render
+    resetBoard();
+  </script>
+</body>
+</html>
